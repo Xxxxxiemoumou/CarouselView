@@ -91,6 +91,8 @@ public class CarouselView: UIView
     private var imageDic = [NSURL: UIImage]()
     /// 下载操作缓存字典
     private var operationDic = [NSURL: NSBlockOperation]()
+    /// 下载操作重复的index字典
+    private var indexDic = [NSURL: Set<Int>]()
     
     private var nextIndex = 0
     private var currIndex = 0
@@ -246,7 +248,8 @@ extension CarouselView
         
         var image = imageDic[url]
         guard image == nil else{ /// 内存缓存
-            if self.imageArr.count > index { self.imageArr[index] = image! }
+            debugPrint("内存缓存")
+            if imageArr.count > index { imageArr[index] = image! }
             return
         }
         
@@ -254,21 +257,25 @@ extension CarouselView
         image = cacheData.flatMap(UIImage.init)
         
         guard image == nil else { /// 沙盒缓存
-            GCD.async_main {
-                if index == 0 { self.currImageV.image = image }
-                if self.imageArr.count > index {self.imageArr[index] = image!}
-                self.imageDic[url] = image!
-            }
+            debugPrint("沙盒缓存")
+            if index == 0 { currImageV.image = image }
+            if imageArr.count > index { imageArr[index] = image! }
+            imageDic[url] = image!
             return
         }
         
         if operationDic[url] == nil { /// 队列下载
-            let op = NSBlockOperation{
+            debugPrint("队列不存在")
+            let op = NSBlockOperation{ [url, index]
                 if let data = NSData(contentsOfURL: url),
                     let image = UIImage(data: data)?.decode()/// 解码
                 {
                     GCD.async_main{
-                        if self.imageArr.count > index {self.imageArr[index] = image}
+                        if self.imageArr.count > index {
+                            self.imageArr[index] = image
+                            self.indexDic[url]?.forEach{ self.imageArr[$0] = image }
+                            self.indexDic.removeValueForKey(url)
+                        }
                         self.operationDic.removeValueForKey(url)
                         self.imageDic[url] = image
                     }
@@ -276,6 +283,10 @@ extension CarouselView
             }
             NSOperationQueue().addOperation(op)
             operationDic[url] = op
+        }else{
+            debugPrint("队列存在")
+            if indexDic[url] == nil { indexDic[url] = [] }
+            indexDic[url]!.insert(index)
         }
     }
 }
