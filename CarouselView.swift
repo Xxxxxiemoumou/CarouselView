@@ -392,23 +392,43 @@ extension UIImageView {
 
 extension UIImage {
     /// 解码图片
-    func decode() -> UIImage?
+    func decode() -> UIImage
     {
-        let imageRef = self.CGImage
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.PremultipliedLast.rawValue).rawValue
-        let contextHolder = UnsafeMutablePointer<Void>(nil)
-        let context = CGBitmapContextCreate(contextHolder,
-                                            CGImageGetWidth(imageRef),
-                                            CGImageGetHeight(imageRef), 8, 0,
-                                            colorSpace, bitmapInfo)
-        if let context = context {
-            let rect = CGRectMake(0, 0, CGFloat(CGImageGetWidth(imageRef)), CGFloat(CGImageGetHeight(imageRef)))
-            CGContextDrawImage(context, rect, imageRef)
-            let decompressedImageRef = CGBitmapContextCreateImage(context)
-            return UIImage(CGImage: decompressedImageRef!, scale: scale, orientation:imageOrientation)
-        }else{
-            return nil
+        do {
+            guard self.images == nil else { return self }
+            
+            let imageRef = self.CGImage
+            let alpha = CGImageGetAlphaInfo(imageRef)
+            
+            let anyAlpha = (alpha == .First || alpha == .Last ||
+                alpha == .PremultipliedFirst ||
+                alpha == .PremultipliedLast)
+            if anyAlpha { return self }
+            
+            let width = CGImageGetWidth(imageRef)
+            let height = CGImageGetHeight(imageRef)
+            
+            let imageColorSpaceModel = CGColorSpaceGetModel(CGImageGetColorSpace(imageRef))
+            var colorspaceRef = CGImageGetColorSpace(imageRef)
+            
+            let unsupportedColorSpace = (imageColorSpaceModel.rawValue == 0 || imageColorSpaceModel.rawValue == -1 || imageColorSpaceModel == .CMYK || imageColorSpaceModel == .Indexed)
+            
+            if unsupportedColorSpace { colorspaceRef = CGColorSpaceCreateDeviceRGB() }
+            
+            let void = UnsafeMutablePointer<Void>(nil)
+            let context = CGBitmapContextCreate(void, width, height,
+                                                CGImageGetBitsPerComponent(imageRef),
+                                                0,
+                                                colorspaceRef,
+                                                CGBitmapInfo.ByteOrderDefault.rawValue
+                                                    | CGImageAlphaInfo.PremultipliedFirst.rawValue)
+    
+            CGContextDrawImage(context, CGRectMake(0, 0, CGFloat(width), CGFloat(height)), imageRef)
+            let imageRefWithAlpha = CGBitmapContextCreateImage(context)!
+            
+            let imageWithAlpha = UIImage(CGImage: imageRefWithAlpha, scale: self.scale, orientation: self.imageOrientation)
+            
+            return imageWithAlpha
         }
     }
 }
